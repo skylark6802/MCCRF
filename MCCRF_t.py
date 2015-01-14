@@ -72,7 +72,7 @@ def Learning(graph, update_iter, sample_iter):
             tag_list.append(node)
     # initial parameter
     print 'initial...'
-    lda = 3*[-10]
+    lda = 3*[-15] # to do: we can design appropriate initial value of lambda
     for e in train_edges:
         y = len(graph.edge[e[0]][e[1]])
         y_p = random.randint(0,30)
@@ -81,7 +81,7 @@ def Learning(graph, update_iter, sample_iter):
             graph.edge[e[0]][e[1]][edge]['y'] = y # ground truth y
     print 'training...'
     # calculate P(Y|X)
-    learning_rate = 0.01
+    learning_rate = 0.0001
     m_value = 800
     P_Y_X = 0
     exp_lda = math.exp(lda[0])
@@ -116,15 +116,21 @@ def Learning(graph, update_iter, sample_iter):
                         z = 0
                         for v in graph.neighbors(tag):
                             if graph.node[v]['types'] == 'user' and (not v == t) and graph.edge[v][tag][0]['belongs'] == 'train':
-                                P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2)
+                                if v == user:
+                                    P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y']-graph.edge[tag][t][0]['y_p'],2)
+                                else:
+                                    P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2)
+                        for l in range(m_value):
+                            P[l] = P_Y_X
+
                         for v in graph.neighbors(tag):
                             if graph.node[v]['types'] == 'user' and (not v == t) and graph.edge[v][tag][0]['belongs'] == 'train':
                                 if v == user:
                                     for l in range(m_value):
-                                        P[l] = P_Y_X - 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y']-l,2)
+                                        P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y']-l,2)
                                 else:
                                     for l in range(m_value):
-                                        P[l] = P_Y_X - 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y_p']-l,2)
+                                        P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y_p']-l,2)
                         Sum = 0
                         for l in range(m_value):
                             P[l] = math.exp(P[l])
@@ -141,8 +147,12 @@ def Learning(graph, update_iter, sample_iter):
                         #update P(Y|X)
                         for v in graph.neighbors(tag):
                             if graph.node[v]['types'] == 'user' and (not v == t) and graph.edge[v][tag][0]['belongs'] == 'train':
-                                P_Y_X += -0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2)
-                                record[ train_edges.index((tag,t)) ].append( -0.5*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2) )
+                                if v == user:
+                                    P_Y_X += -0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y']-graph.edge[tag][t][0]['y_p'],2)
+                                    record[ train_edges.index((tag,t)) ].append( -0.5*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2) )
+                                else:
+                                    P_Y_X += -0.5*exp_lda*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2)
+                                    record[ train_edges.index((tag,t)) ].append( -0.5*math.pow(graph.edge[tag][v][0]['y_p']-graph.edge[tag][t][0]['y_p'],2) )
 
                         #elif graph.node[t[0]]['types'] == 'publication' or graph.node[t[1]]['types'] == 'publication':
         E = [0]*len(train_edges)
@@ -322,7 +332,8 @@ if __name__ == '__main__':
    
     # read data
     graph = nx.MultiGraph()
-    f = open('../../Data/small_data_100/user-tag/out.bibsonomy-2ut','r')
+    dirPath = '../../Data/small_data_1000/'
+    f = open(dirPath+'user-tag/out.bibsonomy-2ut','r')
     for line in f:
         l = line.strip('\n').split(' ')
         graph.add_node('user'+l[0], types = 'user')
@@ -330,7 +341,7 @@ if __name__ == '__main__':
         graph.add_edge('user'+l[0], 'tag'+l[1], weight=l[2], time=l[3], belongs='train')# belong = train or test
     f.close();
 
-    f = open('../../Data/small_data_100/user-publication/out.bibsonomy-2ui','r')
+    f = open(dirPath+'user-publication/out.bibsonomy-2ui','r')
     for line in f:
         l = line.strip('\n').split(' ')
         graph.add_node('user'+l[0], types = 'user')
@@ -338,7 +349,7 @@ if __name__ == '__main__':
         graph.add_edge('user'+l[0], 'publication'+l[1], weight=l[2], time=l[3], belongs='train')
     f.close();
 
-    f = open('../../Data/small_data_100/tag-publication/out.bibsonomy-2ti','r')
+    f = open(dirPath+'tag-publication/out.bibsonomy-2ti','r')
     for line in f:
         l = line.strip('\n').split(' ')
         graph.add_node('tag'+l[0], types = 'tag')
@@ -350,11 +361,11 @@ if __name__ == '__main__':
     sample_iter = 10
     print 'num of nodes =',len(graph.nodes())
     print 'num of edges =',len(graph.edges())
-    #Statistic()
+    Statistic()
     print 'split data..'
     SplitData(graph)
     print 'begin to learning'
     lda = Learning(graph, update_iter, sample_iter)
     print 'inference testing data'
-    Inference(graph, sample_iter, lda)
+    #Inference(graph, sample_iter, lda)
 
