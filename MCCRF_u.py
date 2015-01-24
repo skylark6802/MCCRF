@@ -103,7 +103,7 @@ def Learning(graph, update_iter, sample_iter):
             user_list.append(node)
     # initial parameter
     print 'initial...'
-    lda = 3*[-5] # lambda'
+    lda = 3*[-7] # lambda'
     m_value = 50
     for e in train_edges:
         y = len(graph.edge[e[0]][e[1]])
@@ -344,11 +344,12 @@ def Inference(graph, sample_iter, lda):
                             P_Y_X += -0.5*exp_lda*math.pow(graph.edge[user][v][0]['y']-graph.edge[pub][user][0]['y_p'],2)
                         else: # test
                             P_Y_X += -0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-graph.edge[pub][user][0]['y_p'],2)
-        
+
 
         temperature *= coolingRate
         iteration += 1
         #print iteration, temperature
+    print iteration
     RMSE(graph,test_edges)
     return
 

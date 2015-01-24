@@ -79,7 +79,7 @@ def SplitData(graph):
 def RMSE(graph,edges):
     rmse = 0
     for t in edges:
-        if graph.node[t[0]]['types'] == 'user' or graph.node[t[1]]['types'] == 'user':
+        if graph.node[t[0]]['types'] == 'publication' or graph.node[t[1]]['types'] == 'publication':
             rmse += math.pow(graph.edge[t[0]][t[1]][0]['y']-graph.edge[t[0]][t[1]][0]['y_p'],2)
     rmse = math.sqrt(rmse/float(len(edges)))
     print 'rmse =',rmse
@@ -89,22 +89,22 @@ def Learning(graph, update_iter, sample_iter):
     
     train_edges = []
     for node in graph.nodes():
-        if graph.node[node]['types'] == 'tag':
+        if graph.node[node]['types'] == 'user':
             for nn in graph.neighbors(node):
-                if graph.node[nn]['types'] == 'user':
+                if graph.node[nn]['types'] == 'publication':
                     for edge in graph.edge[nn][node]:
                         if graph.edge[nn][node][edge]['belongs'] == 'train':
                             train_edges.append((nn,node))
                             break
     print 'train size=',len(train_edges)
-    user_list = []
+    pub_list = []
     for node in graph.nodes():
-        if graph.node[node]['types'] == 'user':
-            user_list.append(node)
+        if graph.node[node]['types'] == 'publication':
+            pub_list.append(node)
     # initial parameter
     print 'initial...'
-    lda = 3*[-18] # to do: we can design appropriate initial value of lambda
-    m_value = 100
+    lda = 3*[-5] # lambda'
+    m_value = 50
     for e in train_edges:
         y = len(graph.edge[e[0]][e[1]])
         y_p = random.randint(0,m_value)
@@ -118,20 +118,19 @@ def Learning(graph, update_iter, sample_iter):
     learning_rate = 0.01
     P_Y_X = 0.0
     exp_lda = math.exp(lda[0])
-    sameUser = 0
-    for t in user_list:# two user link to same tag
-        tag = []
+    samePub = 0
+    for t in pub_list:# two user link to same publication
+        user = []
         for n in graph.neighbors(t):
-            if graph.node[n]['types'] == 'tag' and graph.edge[n][t][0]['belongs'] == 'train':
-                tag.append(n)
-        if len(tag) > 1:
-            sameUser += len(tag)
-        for u in tag:
-            for v in tag:
+            if graph.node[n]['types'] == 'user' and graph.edge[n][t][0]['belongs'] == 'train':
+                user.append(n)
+        if len(user) > 1:
+            samePub += len(user)
+        for u in user:
+            for v in user:
                 if not v == u:
                     P_Y_X += -0.5*exp_lda*math.pow(graph.edge[t][v][0]['y_p']-graph.edge[t][u][0]['y_p'],2)
-    
-    print 'number of tags in same user =',sameUser
+    print 'number of users in same publication =',samePub
     record = []
     for i in range(len(train_edges)):
         record.append([])
@@ -141,34 +140,34 @@ def Learning(graph, update_iter, sample_iter):
             for j in range(sample_iter):
                 #sample y_t when y_k is known
                 P = [0]*m_value
-                if graph.node[k[0]]['types'] == 'tag':
-                    tag = k[0]
+                if graph.node[k[0]]['types'] == 'publication':
+                    pub = k[0]
                     user = k[1]
-                elif graph.node[k[1]]['types'] == 'tag':
-                    tag = k[1]
+                elif graph.node[k[1]]['types'] == 'publication':
+                    pub = k[1]
                     user = k[0]
                 else:
                     continue
-                for t in graph.neighbors(user):
-                    if graph.node[t]['types'] == 'tag' and (not t == tag) and graph.edge[t][user][0]['belongs'] == 'train':
+                for t in graph.neighbors(pub):
+                    if graph.node[t]['types'] == 'user' and (not t == user) and graph.edge[t][pub][0]['belongs'] == 'train':
                         z = 0
-                        for v in graph.neighbors(user):
-                            if graph.node[v]['types'] == 'tag' and (not v == t) and graph.edge[v][user][0]['belongs'] == 'train':
-                                P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-graph.edge[user][t][0]['y_p'],2)
+                        for v in graph.neighbors(pub):
+                            if graph.node[v]['types'] == 'user' and (not v == t) and graph.edge[v][pub][0]['belongs'] == 'train':
+                                P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-graph.edge[pub][t][0]['y_p'],2)
                         for l in range(m_value):
                             P[l] = P_Y_X
 
-                        for v in graph.neighbors(user):
-                            if graph.node[v]['types'] == 'tag' and (not v == t) and graph.edge[v][user][0]['belongs'] == 'train':
-                                if v == tag:
+                        for v in graph.neighbors(pub):
+                            if graph.node[v]['types'] == 'user' and (not v == t) and graph.edge[v][pub][0]['belongs'] == 'train': # calculate P for all possible y
+                                if v == user:
                                     for l in range(m_value):
-                                        P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y']-l,2)
+                                        P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y']-l,2)
                                 else:
                                     for l in range(m_value):
-                                        P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-l,2)
+                                        P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-l,2)
                         Sum = 0
                         for l in range(m_value):
-                            P[l] = math.exp(P[l])
+                            P[l] = math.exp(P[l]) # log(P) -> P
                             Sum += P[l]
                         for l in range(m_value):
                             if not Sum == 0:
@@ -176,16 +175,16 @@ def Learning(graph, update_iter, sample_iter):
                             else:
                                 P[random.randint(0,m_value-1)] = 1.0
                         distrib = rv_discrete( values=(np.arange(m_value), P) )
-                        pre = distrib.rvs(size=1) # sample a value from ditribution
-                        for edge in graph.edge[user][t]:
-                            graph.edge[user][t][edge]['y_p'] = pre[0]
-                        #update P(Y|X)
+                        pre = distrib.rvs(size=1) # sample a value from ditribution calculated
+                        for edge in graph.edge[pub][t]:
+                            graph.edge[pub][t][edge]['y_p'] = pre[0]
+                        #update P(Y|X) and record sample of (pub,t)
                         temp = 0.0
-                        for v in graph.neighbors(user):
-                            if graph.node[v]['types'] == 'tag' and (not v == t) and graph.edge[v][user][0]['belongs'] == 'train':
-                                P_Y_X += -0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-graph.edge[user][t][0]['y_p'],2)
-                                temp += -0.5*math.pow(graph.edge[user][v][0]['y_p']-graph.edge[user][t][0]['y_p'],2)
-                        record[ train_edges.index((user,t)) ].append( temp )
+                        for v in graph.neighbors(pub):
+                            if graph.node[v]['types'] == 'user' and (not v == t) and graph.edge[v][pub][0]['belongs'] == 'train':
+                                P_Y_X += -0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-graph.edge[pub][t][0]['y_p'],2) # log P
+                                temp += -0.5*math.pow(graph.edge[pub][v][0]['y_p']-graph.edge[pub][t][0]['y_p'],2)
+                        record[ train_edges.index((pub,t)) ].append( temp )
 
         E = [0]*len(train_edges)
         for t,k in enumerate(train_edges):
@@ -196,17 +195,17 @@ def Learning(graph, update_iter, sample_iter):
             record[t] = []
         delta = [0]
         for t,k in enumerate( train_edges):
-            if graph.node[k[0]]['types'] == 'tag':
-                tag = k[0]
+            if graph.node[k[0]]['types'] == 'publication':
+                pub = k[0]
                 user = k[1]
-            elif graph.node[k[1]]['types'] == 'tag':
-                tag = k[1]
+            elif graph.node[k[1]]['types'] == 'publication':
+                pub = k[1]
                 user = k[0]
             else:
                 continue
-            for v in graph.neighbors(user):
-                if graph.node[v]['types'] == 'tag' and (not v == tag) and graph.edge[v][user][0]['belongs'] == 'train':
-                    delta[0] += -0.5*math.pow(graph.edge[user][v][0]['y']-graph.edge[tag][user][0]['y'],2)
+            for v in graph.neighbors(pub):
+                if graph.node[v]['types'] == 'user' and (not v == user) and graph.edge[v][pub][0]['belongs'] == 'train':
+                    delta[0] += -0.5*math.pow(graph.edge[pub][v][0]['y']-graph.edge[pub][user][0]['y'],2)
             delta[0] = delta[0] - E[t]
         delta[0] = exp_lda*delta[0]
         lda[0] = lda[0] + learning_rate*delta[0]
@@ -226,19 +225,19 @@ def Inference(graph, sample_iter, lda):
     #initial prediction
     test_edges = []
     for node in graph.nodes():
-        if graph.node[node]['types'] == 'tag':
+        if graph.node[node]['types'] == 'user':
             for nn in graph.neighbors(node):
-                if graph.node[nn]['types'] == 'user':
+                if graph.node[nn]['types'] == 'publication':
                     for edge in graph.edge[nn][node]:
                         if graph.edge[nn][node][edge]['belongs'] == 'test':
                             test_edges.append((nn,node))
                             break
     print 'test size=',len(test_edges)
-    m_value = 100
-    user_list = []
+    m_value = 50
+    pub_list = []
     for node in graph.nodes():
-        if graph.node[node]['types'] == 'user':
-            user_list.append(node)
+        if graph.node[node]['types'] == 'publication':
+            pub_list.append(node)
     for e in test_edges:
         y = len(graph.edge[e[0]][e[1]])
         y_p = random.randint(0,m_value)
@@ -248,16 +247,16 @@ def Inference(graph, sample_iter, lda):
 
     #Gibbs sampling initialization
     P_Y_X = 0
-    sameUser = 0
-    for t in user_list:# two user link to same tag
-        tag = []
+    samePub = 0
+    for t in pub_list:# two user link to same tag
+        user = []
         for n in graph.neighbors(t):
-            if graph.node[n]['types'] == 'tag':
-                tag.append(n)
-        if len(tag) > 1:
-            sameUser += len(tag)
-        for u in tag:
-            for v in tag:
+            if graph.node[n]['types'] == 'user':
+                user.append(n)
+        if len(user) > 1:
+            samePub += len(user)
+        for u in user:
+            for v in user:
                 if not v == u:
                     if graph.edge[u][t][0]['belongs'] == 'train':
                         if graph.edge[v][t][0]['belongs'] == 'train':
@@ -269,7 +268,7 @@ def Inference(graph, sample_iter, lda):
                             P_Y_X += -0.5*exp_lda*math.pow(graph.edge[t][v][0]['y']-graph.edge[t][u][0]['y_p'],2)
                         else:
                             P_Y_X += -0.5*exp_lda*math.pow(graph.edge[t][v][0]['y_p']-graph.edge[t][u][0]['y_p'],2)
-    print 'number of users in same publication =',sameUser
+    print 'number of users in same publication =',samePub
     print P_Y_X
     #simulated annealing
     print 'simulated annealing :)'
@@ -278,32 +277,32 @@ def Inference(graph, sample_iter, lda):
         for i in range(sample_iter):
             for t in test_edges:
                 P = [0]*m_value
-                if graph.node[t[0]]['types'] == 'tag':
-                    tag = t[0]
+                if graph.node[t[0]]['types'] == 'publication':
+                    pub = t[0]
                     user = t[1]
-                elif graph.node[t[1]]['types'] == 'tag':
-                    tag = t[1]
+                elif graph.node[t[1]]['types'] == 'publication':
+                    pub = t[1]
                     user = t[0]
                 else:
                     continue
                 z = 0
                 oldLikelihood = P_Y_X
-                for v in graph.neighbors(user):
-                    if graph.node[v]['types'] == 'tag' and (not v == tag):
-                        if graph.edge[v][user][0]['belongs'] == 'train':
-                            P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y']-graph.edge[tag][user][0]['y_p'],2)
+                for v in graph.neighbors(pub):
+                    if graph.node[v]['types'] == 'user' and (not v == user):
+                        if graph.edge[v][pub][0]['belongs'] == 'train':
+                            P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y']-graph.edge[pub][user][0]['y_p'],2)
                         else: # test
-                            P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-graph.edge[tag][user][0]['y_p'],2)
+                            P_Y_X = P_Y_X + 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-graph.edge[pub][user][0]['y_p'],2)
                 for l in range(m_value):
                     P[l] = P_Y_X
-                for v in graph.neighbors(user):
-                    if graph.node[v]['types'] == 'tag' and (not v == tag):
-                        if graph.edge[v][user][0]['belongs'] == 'train':
+                for v in graph.neighbors(pub):
+                    if graph.node[v]['types'] == 'user' and (not v == user):
+                        if graph.edge[v][pub][0]['belongs'] == 'train':
                             for l in range(m_value):
-                                P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y']-l,2)
+                                P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y']-l,2)
                         else: # test
                             for l in range(m_value):
-                                P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-l,2)
+                                P[l] = P[l] - 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-l,2)
                 Sum = 0
                 for l in range(m_value):
                     P[l] = math.exp(P[l])
@@ -325,30 +324,29 @@ def Inference(graph, sample_iter, lda):
 
                 #calculate delta F
                 Likelihood = P_Y_X
-                for v in graph.neighbors(user):
-                    if graph.node[v]['types'] == 'tag' and (not v == tag):
-                        if graph.edge[v][user][0]['belongs'] == 'train':
-                            Likelihood = Likelihood - 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y']-pre[0],2)
+                for v in graph.neighbors(pub):
+                    if graph.node[v]['types'] == 'user' and (not v == user):
+                        if graph.edge[v][pub][0]['belongs'] == 'train':
+                            Likelihood = Likelihood - 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y']-pre[0],2)
                         else:
-                            Likelihood = Likelihood - 0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-pre[0],2)
+                            Likelihood = Likelihood - 0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-pre[0],2)
                 F = Likelihood - oldLikelihood
                 
                 if min(1.0,math.exp(F/temperature)) > random.uniform(0.0,1.0):
-                    for edge in graph.edge[tag][user]:
-                        graph.edge[tag][user][edge]['y_p'] = pre[0]
+                    for edge in graph.edge[pub][user]:
+                        graph.edge[pub][user][edge]['y_p'] = pre[0]
 
                 #update P(Y|X)
-                for v in graph.neighbors(user):
-                    if graph.node[v]['types'] == 'tag' and (not v == tag):
-                        if graph.edge[v][user][0]['belongs'] == 'train':
-                            P_Y_X += -0.5*exp_lda*math.pow(graph.edge[user][v][0]['y']-graph.edge[tag][user][0]['y_p'],2)
+                for v in graph.neighbors(pub):
+                    if graph.node[v]['types'] == 'user' and (not v == user):
+                        if graph.edge[v][pub][0]['belongs'] == 'train':
+                            P_Y_X += -0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y']-graph.edge[pub][user][0]['y_p'],2)
                         else: # test
-                            P_Y_X += -0.5*exp_lda*math.pow(graph.edge[user][v][0]['y_p']-graph.edge[tag][user][0]['y_p'],2)
+                            P_Y_X += -0.5*exp_lda*math.pow(graph.edge[pub][v][0]['y_p']-graph.edge[pub][user][0]['y_p'],2)
 
 
         temperature *= coolingRate
         iteration += 1
-        #print iteration, temperature
     print iteration
     RMSE(graph,test_edges)
     return
@@ -357,7 +355,7 @@ if __name__ == '__main__':
    
     # read data
     graph = nx.MultiGraph()
-    dirPath = '../../Data/small_data_100/'
+    dirPath = '../../Data/small_data_3000/'
     f = open(dirPath+'user-tag/out.bibsonomy-2ut','r')
     for line in f:
         l = line.strip('\n').split(' ')
@@ -382,7 +380,7 @@ if __name__ == '__main__':
         graph.add_edge('tag'+l[0], 'publication'+l[1], weight=l[2], time=l[3])
     f.close();
 
-    update_iter = 10
+    update_iter = 20
     sample_iter = 10
     print 'num of nodes =',len(graph.nodes())
     print 'num of edges =',len(graph.edges())
